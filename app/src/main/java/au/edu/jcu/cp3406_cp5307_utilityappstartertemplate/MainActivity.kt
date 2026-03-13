@@ -5,16 +5,20 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -35,7 +39,6 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun UtilityApp() {
-    // Create one shared ViewModel instance for the whole app
     val viewModel: CurrencyViewModel = viewModel()
     var selectedTab by remember { mutableStateOf("Utility") }
 
@@ -72,7 +75,6 @@ fun UtilityApp() {
 @Composable
 fun UtilityScreen(viewModel: CurrencyViewModel) {
 
-    // Observe state from ViewModel
     val currencies by viewModel.currencies.collectAsState()
     val result by viewModel.result.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -80,14 +82,12 @@ fun UtilityScreen(viewModel: CurrencyViewModel) {
     val defaultFrom by viewModel.defaultFrom.collectAsState()
     val defaultTo by viewModel.defaultTo.collectAsState()
 
-    // Local UI state
     var amount by remember { mutableStateOf("") }
     var fromCurrency by remember(defaultFrom) { mutableStateOf(defaultFrom) }
     var toCurrency by remember(defaultTo) { mutableStateOf(defaultTo) }
     var fromExpanded by remember { mutableStateOf(false) }
     var toExpanded by remember { mutableStateOf(false) }
 
-    // Use hardcoded list if API currencies haven't loaded yet
     val currencyList = if (currencies.isEmpty())
         listOf("USD", "AUD", "EUR", "GBP", "JPY", "SGD", "CNY", "INR", "CAD", "NZD")
     else currencies
@@ -95,8 +95,9 @@ fun UtilityScreen(viewModel: CurrencyViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
 
         // ── Title ──
@@ -106,13 +107,22 @@ fun UtilityScreen(viewModel: CurrencyViewModel) {
             fontWeight = FontWeight.Bold
         )
 
+        Text(
+            text = "Live exchange rates powered by Frankfurter",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
         // ── Amount Input ──
         OutlinedTextField(
             value = amount,
             onValueChange = { amount = it },
             label = { Text("Amount") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
         )
 
         // ── From Currency Dropdown ──
@@ -144,6 +154,18 @@ fun UtilityScreen(viewModel: CurrencyViewModel) {
                     )
                 }
             }
+        }
+
+        // ── Swap Button ──
+        FilledTonalIconButton(
+            onClick = {
+                val temp = fromCurrency
+                fromCurrency = toCurrency
+                toCurrency = temp
+            },
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        ) {
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Swap currencies")
         }
 
         // ── To Currency Dropdown ──
@@ -193,7 +215,9 @@ fun UtilityScreen(viewModel: CurrencyViewModel) {
 
         // ── Loading Spinner ──
         if (isLoading) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+            CircularProgressIndicator(
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
         }
 
         // ── Error Message ──
@@ -221,7 +245,9 @@ fun UtilityScreen(viewModel: CurrencyViewModel) {
                 )
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
@@ -234,7 +260,15 @@ fun UtilityScreen(viewModel: CurrencyViewModel) {
                         text = result,
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "$amount $fromCurrency → $toCurrency",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        textAlign = TextAlign.Center
                     )
                 }
             }
@@ -263,6 +297,7 @@ fun SettingsScreen(viewModel: CurrencyViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
@@ -275,7 +310,7 @@ fun SettingsScreen(viewModel: CurrencyViewModel) {
         )
 
         Text(
-            text = "Set your default currencies",
+            text = "Customise your default conversion preferences",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -343,23 +378,37 @@ fun SettingsScreen(viewModel: CurrencyViewModel) {
         }
 
         // ── Decimal Places Setting ──
-        Text(
-            text = "Decimal Places",
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium
-        )
-
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            listOf("2", "4").forEach { option ->
-                FilterChip(
-                    selected = decimalPlaces == option,
-                    onClick = { decimalPlaces = option },
-                    label = { Text("$option decimal places") }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Decimal Places",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
                 )
+                Text(
+                    text = "How many decimal places to show in the result",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    listOf("2", "4").forEach { option ->
+                        FilterChip(
+                            selected = decimalPlaces == option,
+                            onClick = { decimalPlaces = option },
+                            label = { Text("$option places") }
+                        )
+                    }
+                }
             }
         }
 
-        // ── Apply Button — saves settings to ViewModel ──
+        // ── Apply Button ──
         Button(
             onClick = {
                 viewModel.defaultFrom.value = defaultFrom
@@ -369,6 +418,21 @@ fun SettingsScreen(viewModel: CurrencyViewModel) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Apply Settings", fontSize = 16.sp)
+        }
+
+        // ── Confirmation message ──
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
+            )
+        ) {
+            Text(
+                text = "💡 Settings apply to the default currencies shown when you open the Utility screen.",
+                modifier = Modifier.padding(16.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
         }
     }
 }

@@ -15,10 +15,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import au.edu.jcu.cp3406_cp5307_utilityappstartertemplate.ui.theme.CP3406_CP5603UtilityAppStarterTemplateTheme
+import au.edu.jcu.cp3406_cp5307_utilityappstartertemplate.viewmodel.CurrencyViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,16 +33,10 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-fun UtilityAppPreview() {
-    CP3406_CP5603UtilityAppStarterTemplateTheme {
-        UtilityApp()
-    }
-}
-
 @Composable
 fun UtilityApp() {
+    // Create one shared ViewModel instance for the whole app
+    val viewModel: CurrencyViewModel = viewModel()
     var selectedTab by remember { mutableStateOf("Utility") }
 
     Scaffold(
@@ -64,8 +59,8 @@ fun UtilityApp() {
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
             when (selectedTab) {
-                "Utility" -> UtilityScreen()
-                "Settings" -> SettingsScreen()
+                "Utility" -> UtilityScreen(viewModel)
+                "Settings" -> SettingsScreen(viewModel)
             }
         }
     }
@@ -75,20 +70,27 @@ fun UtilityApp() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UtilityScreen() {
+fun UtilityScreen(viewModel: CurrencyViewModel) {
 
-    // List of currencies to show in dropdowns (hardcoded for now)
-    val currencies = listOf("USD", "AUD", "EUR", "GBP", "JPY", "SGD", "CNY", "INR", "CAD", "NZD")
+    // Observe state from ViewModel
+    val currencies by viewModel.currencies.collectAsState()
+    val result by viewModel.result.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val defaultFrom by viewModel.defaultFrom.collectAsState()
+    val defaultTo by viewModel.defaultTo.collectAsState()
 
-    // State variables — these hold the current values on screen
+    // Local UI state
     var amount by remember { mutableStateOf("") }
-    var fromCurrency by remember { mutableStateOf("USD") }
-    var toCurrency by remember { mutableStateOf("AUD") }
-    var result by remember { mutableStateOf("") }
-
-    // Dropdown open/close states
+    var fromCurrency by remember(defaultFrom) { mutableStateOf(defaultFrom) }
+    var toCurrency by remember(defaultTo) { mutableStateOf(defaultTo) }
     var fromExpanded by remember { mutableStateOf(false) }
     var toExpanded by remember { mutableStateOf(false) }
+
+    // Use hardcoded list if API currencies haven't loaded yet
+    val currencyList = if (currencies.isEmpty())
+        listOf("USD", "AUD", "EUR", "GBP", "JPY", "SGD", "CNY", "INR", "CAD", "NZD")
+    else currencies
 
     Column(
         modifier = Modifier
@@ -132,7 +134,7 @@ fun UtilityScreen() {
                 expanded = fromExpanded,
                 onDismissRequest = { fromExpanded = false }
             ) {
-                currencies.forEach { currency ->
+                currencyList.forEach { currency ->
                     DropdownMenuItem(
                         text = { Text(currency) },
                         onClick = {
@@ -163,7 +165,7 @@ fun UtilityScreen() {
                 expanded = toExpanded,
                 onDismissRequest = { toExpanded = false }
             ) {
-                currencies.forEach { currency ->
+                currencyList.forEach { currency ->
                     DropdownMenuItem(
                         text = { Text(currency) },
                         onClick = {
@@ -178,17 +180,36 @@ fun UtilityScreen() {
         // ── Convert Button ──
         Button(
             onClick = {
-                // Fake conversion for now — just multiplies by 1.5 as placeholder
                 val input = amount.toDoubleOrNull()
-                result = if (input != null) {
-                    "%.2f $toCurrency".format(input * 1.5)
-                } else {
-                    "Please enter a valid amount"
+                if (input != null) {
+                    viewModel.convert(input, fromCurrency, toCurrency)
                 }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isLoading
         ) {
             Text("Convert", fontSize = 16.sp)
+        }
+
+        // ── Loading Spinner ──
+        if (isLoading) {
+            CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+        }
+
+        // ── Error Message ──
+        if (error.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Text(
+                    text = error,
+                    modifier = Modifier.padding(16.dp),
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
         }
 
         // ── Result Card ──
@@ -225,13 +246,16 @@ fun UtilityScreen() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(viewModel: CurrencyViewModel) {
 
-    val currencies = listOf("USD", "AUD", "EUR", "GBP", "JPY", "SGD", "CNY", "INR", "CAD", "NZD")
+    val currencies by viewModel.currencies.collectAsState()
+    val currencyList = if (currencies.isEmpty())
+        listOf("USD", "AUD", "EUR", "GBP", "JPY", "SGD", "CNY", "INR", "CAD", "NZD")
+    else currencies
 
-    var defaultFrom by remember { mutableStateOf("USD") }
-    var defaultTo by remember { mutableStateOf("AUD") }
-    var decimalPlaces by remember { mutableStateOf("2") }
+    var defaultFrom by remember { mutableStateOf(viewModel.defaultFrom.value) }
+    var defaultTo by remember { mutableStateOf(viewModel.defaultTo.value) }
+    var decimalPlaces by remember { mutableStateOf(viewModel.decimalPlaces.value.toString()) }
 
     var fromExpanded by remember { mutableStateOf(false) }
     var toExpanded by remember { mutableStateOf(false) }
@@ -275,7 +299,7 @@ fun SettingsScreen() {
                 expanded = fromExpanded,
                 onDismissRequest = { fromExpanded = false }
             ) {
-                currencies.forEach { currency ->
+                currencyList.forEach { currency ->
                     DropdownMenuItem(
                         text = { Text(currency) },
                         onClick = {
@@ -306,7 +330,7 @@ fun SettingsScreen() {
                 expanded = toExpanded,
                 onDismissRequest = { toExpanded = false }
             ) {
-                currencies.forEach { currency ->
+                currencyList.forEach { currency ->
                     DropdownMenuItem(
                         text = { Text(currency) },
                         onClick = {
@@ -335,9 +359,13 @@ fun SettingsScreen() {
             }
         }
 
-        // ── Apply Button ──
+        // ── Apply Button — saves settings to ViewModel ──
         Button(
-            onClick = { /* Will wire up to ViewModel in Phase 2 */ },
+            onClick = {
+                viewModel.defaultFrom.value = defaultFrom
+                viewModel.defaultTo.value = defaultTo
+                viewModel.decimalPlaces.value = decimalPlaces.toInt()
+            },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Apply Settings", fontSize = 16.sp)
